@@ -39,11 +39,19 @@ plugins {
 
     // Apply third-party plugins.
     id("com.github.johnrengelman.shadow")
+    id("com.palantir.graal")
 }
 
 application {
     applicationName = "ort"
     mainClassName = "org.ossreviewtoolkit.cli.OrtMainKt"
+}
+
+graal {
+    graalVersion("21.1.0")
+    javaVersion("11")
+    mainClass("org.ossreviewtoolkit.cli.OrtMainKt")
+    outputName("outputname")
 }
 
 tasks.withType<ShadowJar> {
