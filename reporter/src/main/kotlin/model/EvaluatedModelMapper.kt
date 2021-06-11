@@ -43,6 +43,7 @@ import org.ossreviewtoolkit.model.yamlMapper
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.reporter.utils.MetaDataCalculator
 import org.ossreviewtoolkit.reporter.utils.StatisticsCalculator
+import org.ossreviewtoolkit.utils.Environment
 import org.ossreviewtoolkit.utils.ProcessedDeclaredLicense
 
 /**
@@ -115,6 +116,7 @@ internal class EvaluatedModelMapper(private val input: ReporterInput) {
             dependencyTrees = dependencyTrees,
             ruleViolationResolutions = ruleViolationResolutions,
             ruleViolations = ruleViolations,
+            environment = Environment(),
             statistics = StatisticsCalculator().getStatistics(
                 input.ortResult,
                 input.resolutionProvider,

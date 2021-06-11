@@ -763,6 +763,19 @@ rule_violations:
   message: "BSD-3-Clause warning"
   how_to_fix: "* *Step 1*\n* __Step 2__\n* ***Step 3***\n```\nSome long text verify\
     \ that overflow:scroll is working as expected.\n```"
+environment:
+  ort_version: "HEAD"
+  java_version: "<REPLACE_JAVA>"
+  os: "<REPLACE_OS>"
+  processors: "<REPLACE_PROCESSORS>"
+  max_memory: "<REPLACE_MAX_MEMORY>"
+  variables:
+    OS: "Windows_NT"
+    COMSPEC: "C:\\WINDOWS\\system32\\cmd.exe"
+    http_proxy: "http://localhost:3129/"
+    https_proxy: "http://localhost:3129/"
+    JAVA_HOME: "C:\\Users\\sse1be\\.jdks\\adopt-openjdk-11.0.8"
+  tool_versions: {}
 statistics:
   open_issues:
     errors: 1

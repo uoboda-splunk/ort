@@ -47,6 +47,7 @@ import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.reporter.reporters.WebAppReporter
 import org.ossreviewtoolkit.reporter.utils.IntIdModule
+import org.ossreviewtoolkit.utils.Environment
 
 /**
  * The [EvaluatedModel] represents the outcome of the evaluation of a [ReporterInput]. This means that all additional
@@ -103,6 +104,7 @@ data class EvaluatedModel(
     val dependencyTrees: List<DependencyTreeNode>,
     val ruleViolationResolutions: List<RuleViolationResolution>,
     val ruleViolations: List<EvaluatedRuleViolation>,
+    val environment: Environment,
     val statistics: Statistics,
     val repository: Repository,
 
