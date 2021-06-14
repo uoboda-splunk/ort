@@ -1,6 +1,6 @@
 ---
 project:
-  id: "CocoaPods::oss-review-toolkit/ort:<REPLACE_REVISION>"
+  id: "CocoaPods::src/funTest/assets/projects/synthetic/cocoapods/regular/Podfile.lock:"
   definition_file_path: "analyzer/src/funTest/assets/projects/synthetic/cocoapods/regular/Podfile.lock"
   declared_licenses: []
   declared_licenses_processed: {}

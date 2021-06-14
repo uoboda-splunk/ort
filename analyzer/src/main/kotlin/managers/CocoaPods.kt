@@ -31,12 +31,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode
 import com.vdurmont.semver4j.Requirement
 
 import java.io.File
-import java.net.URI
 import java.util.SortedSet
 
 import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
 import org.ossreviewtoolkit.analyzer.PackageManager
-import org.ossreviewtoolkit.downloader.VcsHost
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Identifier
@@ -54,7 +52,6 @@ import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.model.yamlMapper
 import org.ossreviewtoolkit.utils.CommandLineTool
-import org.ossreviewtoolkit.utils.normalizeVcsUrl
 import org.ossreviewtoolkit.utils.textValueOrEmpty
 
 /**
@@ -103,7 +100,6 @@ class CocoaPods(
 
     override fun resolveDependencies(definitionFile: File): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
-        val projectInfo = getProjectInfoFromVcs(workingDir)
         val scope = Scope("dependencies", dependencies = getPackageRefs(definitionFile))
         val packages = scope.collectDependencies().map { getPackage(it, workingDir) }
 
@@ -114,14 +110,14 @@ class CocoaPods(
                     id = Identifier(
                         type = managerName,
                         namespace = "",
-                        name = packageName(projectInfo.namespace, projectInfo.projectName),
-                        version = projectInfo.revision.orEmpty()
+                        name = definitionFile.relativeTo(analysisRoot).invariantSeparatorsPath,
+                        version = ""
                     ),
                     definitionFilePath = VersionControlSystem.getPathInfo(definitionFile).path,
                     authors = sortedSetOf(),
                     declaredLicenses = sortedSetOf(),
                     vcs = VcsInfo.EMPTY,
-                    vcsProcessed = processProjectVcs(workingDir, VcsInfo.EMPTY),
+                    vcsProcessed = processProjectVcs(workingDir),
                     scopeDependencies = sortedSetOf(scope),
                     homepageUrl = ""
                 ),
@@ -153,20 +149,6 @@ class CocoaPods(
             )
         }
 
-    private fun getProjectInfoFromVcs(workingDir: File): CocoapodsProjectInfo {
-        val workingTree = VersionControlSystem.forDirectory(workingDir)
-        val vcsInfo = workingTree?.getInfo() ?: VcsInfo.EMPTY
-        val normalizedVcsUrl = normalizeVcsUrl(vcsInfo.url)
-        val vcsHost = VcsHost.toVcsHost(URI(normalizedVcsUrl))
-
-        return CocoapodsProjectInfo(
-            namespace = vcsHost?.getUserOrOrganization(normalizedVcsUrl),
-            projectName = vcsHost?.getProject(normalizedVcsUrl)
-                ?: workingDir.relativeTo(analysisRoot).invariantSeparatorsPath,
-            revision = vcsInfo.revision
-        )
-    }
-
     private fun lookupPodspec(id: Identifier, workingDir: File): Podspec {
         val topLevelSpecName = id.name.substringBefore("/")
 
@@ -179,8 +161,6 @@ class CocoaPods(
         return podspec.withSubspecs().single { it.name == id.name }
     }
 }
-
-private data class CocoapodsProjectInfo(val namespace: String?, val projectName: String?, val revision: String?)
 
 data class PodSubSpec(
     val name: String,
@@ -195,13 +175,6 @@ data class PodSubSpec(
         }
     }
 }
-
-private fun packageName(namespace: String?, name: String?): String =
-    if (namespace.isNullOrBlank()) {
-        name.orEmpty()
-    } else {
-        "${namespace.orEmpty()}/${name.orEmpty()}"
-    }
 
 private val NAME_AND_VERSION_REGEX = "([\\S]+)\\s+(.*)".toRegex()
 
