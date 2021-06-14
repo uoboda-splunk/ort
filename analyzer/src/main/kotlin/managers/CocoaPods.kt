@@ -281,3 +281,14 @@ private class LicenseDeserializer : StdDeserializer<String>(String::class.java) 
         }
     }
 }
+
+fun main() {
+    val file = File("/home/frank/.cocoapods/repos/trunk/Specs/0/1/9/MaterialComponents/124.2.0/")
+        .resolve("MaterialComponents.podspec.json")
+
+    val podSpec = file.readValue<Podspec>()
+
+    val all = podSpec.withSubspecs().map { it.name }.sorted()
+
+    println(all.joinToString("\n"))
+}
