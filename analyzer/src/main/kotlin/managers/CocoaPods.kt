@@ -20,7 +20,12 @@
 
 package org.ossreviewtoolkit.analyzer.managers
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer
 import com.fasterxml.jackson.databind.node.ObjectNode
 
 import com.vdurmont.semver4j.Requirement
@@ -42,16 +47,13 @@ import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.Scope
-import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
-import org.ossreviewtoolkit.model.createAndLogIssue
-import org.ossreviewtoolkit.model.jsonMapper
+import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.model.yamlMapper
 import org.ossreviewtoolkit.utils.CommandLineTool
-import org.ossreviewtoolkit.utils.ProcessCapture
 import org.ossreviewtoolkit.utils.normalizeVcsUrl
 import org.ossreviewtoolkit.utils.textValueOrEmpty
 
@@ -72,7 +74,7 @@ class CocoaPods(
     analyzerConfig: AnalyzerConfiguration,
     repoConfig: RepositoryConfiguration
 ) : PackageManager(name, analysisRoot, analyzerConfig, repoConfig), CommandLineTool {
-    private var podSpecCache: MutableMap<String, PodSpec> = mutableMapOf()
+    private var podSpecCache: MutableMap<String, Podspec> = mutableMapOf()
     private var issues: MutableList<OrtIssue> = mutableListOf()
 
     class Factory : AbstractPackageManagerFactory<CocoaPods>("CocoaPods") {
@@ -130,16 +132,24 @@ class CocoaPods(
 
     private fun getPackage(id: Identifier, workingDir: File): Package =
         lookupPodspec(id, workingDir).let { podSpec ->
+            val vcs = podSpec.source["git"]?.let { url ->
+                VcsInfo(
+                    type = VcsType.GIT,
+                    url = url,
+                    revision = podSpec.source["tag"] ?: ""
+                )
+            } ?: VcsInfo.EMPTY
+
             Package(
                 id = id,
                 authors = sortedSetOf(),
-                declaredLicenses = listOf(podSpec.declaredLicense).toSortedSet(),
-                description = podSpec.description,
-                homepageUrl = podSpec.homepageUrl,
-                binaryArtifact = podSpec.remoteArtifact,
-                sourceArtifact = RemoteArtifact.EMPTY,
-                vcs = podSpec.vcs,
-                vcsProcessed = processPackageVcs(podSpec.vcs, podSpec.homepageUrl)
+                declaredLicenses = listOf(podSpec.license).toSortedSet(),
+                description = podSpec.summary,
+                homepageUrl = podSpec.homepage,
+                binaryArtifact = RemoteArtifact.EMPTY,
+                sourceArtifact = podSpec.source["http"]?.let { RemoteArtifact(it, Hash.NONE) } ?: RemoteArtifact.EMPTY,
+                vcs = vcs,
+                vcsProcessed = processPackageVcs(vcs, podSpec.homepage)
             )
         }
 
@@ -157,142 +167,20 @@ class CocoaPods(
         )
     }
 
-    private fun lookupPodspec(id: Identifier, workingDir: File): PodSpec {
-        val namespaceOrName = id.name.substringBefore("/")
-        podSpecCache[namespaceOrName]?.let { return it }
+    private fun lookupPodspec(id: Identifier, workingDir: File): Podspec {
+        val topLevelSpecName = id.name.substringBefore("/")
 
-        val pathResult = ProcessCapture(command(workingDir),
-            "spec", "which", namespaceOrName, "--version=${id.version}", "--allow-root", "--regex",
-            workingDir = workingDir
-        )
+        val podspecFile = run("spec", "which", topLevelSpecName, "--version=${id.version}", "--allow-root",
+            "--regex", workingDir = workingDir
+        ).requireSuccess().stdout.trim().let { File(it) }
 
-        if (pathResult.isError) {
-            val issue = createAndLogIssue(
-                managerName,
-                message = pathResult.stdout.trim(),
-                severity = Severity.ERROR
-            )
-            issues.add(issue)
+        val podspec = podSpecCache.getOrPut(id.name) { podspecFile.readValue() }
 
-            return PodSpec(
-                id.namespace,
-                id.name,
-                id.version,
-                "",
-                "",
-                "",
-                VcsInfo.EMPTY,
-                RemoteArtifact.EMPTY,
-                setOf()
-            )
-        }
-
-        val spec = run(
-            "ipc", "spec", pathResult.stdout.trim(), "--allow-root",
-            workingDir = workingDir
-        ).stdout
-
-        var podSpecs = PodSpec.createFromJson(spec)
-        if (id.namespace.isNotEmpty()) { // Filter the subSpecs to find the matching pair
-            podSpecs = podSpecs.filter { it.identifier.name == id.name }
-        }
-
-        val updatedPodSpec = podSpecs.first()
-        podSpecCache[namespaceOrName] = updatedPodSpec
-        return updatedPodSpec
+        return podspec.withSubspecs().single { it.name == id.name }
     }
 }
 
 private data class CocoapodsProjectInfo(val namespace: String?, val projectName: String?, val revision: String?)
-
-data class PodSpec(
-    val namespace: String?,
-    val name: String,
-    val version: String,
-    val homepageUrl: String,
-    val declaredLicense: String,
-    val description: String,
-    val vcs: VcsInfo,
-    val remoteArtifact: RemoteArtifact,
-    var dependencies: Set<PodSpec>
-) {
-    var identifier: Identifier = Identifier("Pod", "", packageName(namespace, name), version)
-
-    companion object Factory {
-        fun createFromJson(spec: String): List<PodSpec> {
-            val json = jsonMapper.readTree(spec)
-
-            val gitUrl = json["source"]?.get("git")
-            val gitTag = json["source"]?.get("tag")
-            var vcs = VcsInfo.EMPTY
-            if (gitUrl != null) {
-                vcs = VcsInfo(VcsType.GIT, url = gitUrl.textValue(), revision = gitTag.textValueOrEmpty())
-            }
-
-            val httpUrl = json["source"]?.get("http")?.textValue()
-            var remoteArtifact = RemoteArtifact.EMPTY
-            if (httpUrl != null) {
-                remoteArtifact = RemoteArtifact(httpUrl, Hash.NONE)
-            }
-
-            val licenseNode = json["license"]
-            val license = if (licenseNode is ObjectNode) {
-                licenseNode["type"].textValue()
-            } else {
-                licenseNode.textValue()
-            }
-
-            val name = json["name"].textValue()
-            val version = json["version"].textValue()
-            val homepage = json["homepage"].textValue()
-            val summary = json["summary"].textValue()
-            val subSpecs = json["subspecs"]?.asIterable()?.map { PodSubSpec.createFromJson(it) }?.map { subSpec ->
-                    PodSpec(
-                        name,
-                        subSpec.name,
-                        version,
-                        homepage,
-                        license,
-                        summary,
-                        vcs,
-                        remoteArtifact,
-                        setOf()
-                    )
-                } ?: listOf()
-
-            return subSpecs.plus(
-                PodSpec(
-                    null,
-                    name,
-                    version,
-                    homepage,
-                    license,
-                    summary,
-                    vcs,
-                    remoteArtifact,
-                    setOf()
-                )
-            )
-        }
-    }
-
-    fun merge(other: PodSpec): PodSpec {
-        require(name == other.name && namespace == other.namespace && version == other.version) {
-            "Cannot merge specs for different pods."
-        }
-
-        return PodSpec(namespace,
-            name,
-            version,
-            homepageUrl.takeUnless { it.isEmpty() } ?: other.homepageUrl,
-            declaredLicense.takeUnless { it.isEmpty() } ?: other.declaredLicense,
-            description.takeUnless { it.isEmpty() } ?: other.description,
-            vcs.takeUnless { it == VcsInfo.EMPTY } ?: other.vcs,
-            remoteArtifact.takeUnless { it == RemoteArtifact.EMPTY } ?: other.remoteArtifact,
-            dependencies.takeUnless { it.isEmpty() } ?: other.dependencies,
-        )
-    }
-}
 
 data class PodSubSpec(
     val name: String,
@@ -315,7 +203,7 @@ private fun packageName(namespace: String?, name: String?): String =
         "${namespace.orEmpty()}/${name.orEmpty()}"
     }
 
-private val REGEX = "([\\S]+)\\s+(.*)".toRegex()
+private val NAME_AND_VERSION_REGEX = "([\\S]+)\\s+(.*)".toRegex()
 
 private fun getPackageRefs(podfileLock: File): SortedSet<PackageReference> {
     val versionForName = mutableMapOf<String, String>()
@@ -328,7 +216,7 @@ private fun getPackageRefs(podfileLock: File): SortedSet<PackageReference> {
             else -> node.textValue()
         }
 
-        val (name, version) = REGEX.find(entry)!!.groups.let {
+        val (name, version) = NAME_AND_VERSION_REGEX.find(entry)!!.groups.let {
             it[1]!!.value to it[2]!!.value.removeSurrounding("(", ")")
         }
         versionForName[name] = version
@@ -346,5 +234,50 @@ private fun getPackageRefs(podfileLock: File): SortedSet<PackageReference> {
     return root.get("DEPENDENCIES").mapTo(sortedSetOf()) { node ->
         val name = node.textValue().substringBefore(" ")
         getPackageRef(name)
+    }
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class Podspec(
+    val name: String = "",
+    val version: String = "",
+    @JsonDeserialize(using = LicenseDeserializer::class)
+    val license: String = "",
+    val summary: String = "",
+    val homepage: String = "",
+    val source: Map<String, String> = emptyMap(),
+    private val subspecs: List<Podspec> = emptyList()
+) {
+    fun withSubspecs(): List<Podspec> {
+        // TODO: beautify
+        val result = mutableListOf<Podspec>()
+
+        fun add(spec: Podspec, namePrefix: String) {
+            val name = "$namePrefix${spec.name}"
+            result += copy(name = "$namePrefix${spec.name}")
+            spec.subspecs.forEach { add(it, "$name/") }
+        }
+
+        add(this, "")
+
+        return result
+    }
+}
+
+/**
+ * Handle deserialization of the following two possible representations:
+ *
+ * 1. https://github.com/CocoaPods/Specs/blob/f75c24e7e9df1dac6ffa410a6fb30f01e026d4d6/Specs/8/5/e/SocketIOKit/2.0.1/SocketIOKit.podspec.json#L6-L9
+ * 2. https://github.com/CocoaPods/Specs/blob/f75c24e7e9df1dac6ffa410a6fb30f01e026d4d6/Specs/8/5/e/FirebaseObjects/0.0.1/FirebaseObjects.podspec.json#L6
+ */
+private class LicenseDeserializer : StdDeserializer<String>(String::class.java) {
+    override fun deserialize(parser: JsonParser, context: DeserializationContext): String {
+        val node = parser.codec.readTree<JsonNode>(parser)
+
+        return if (node.isTextual) {
+            node.textValue()
+        } else {
+            node["type"].textValueOrEmpty()
+        }
     }
 }
