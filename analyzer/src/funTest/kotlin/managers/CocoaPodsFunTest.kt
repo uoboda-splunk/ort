@@ -35,7 +35,7 @@ private val SYNTHETIC_PROJECTS_DIR = File("src/funTest/assets/projects/synthetic
 
 class CocoaPodsFunTest : WordSpec({
     "resolveSingleProject()" should {
-        "determine dependencies from a Podfile.lock without a dependency tree" {
+        "determine dependencies from a Podfile without a dependency tree" {
             val definitionFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods/regular/Podfile").absoluteFile
             val expectedResult = getExpectedResult(
                 definitionFile = definitionFile,
@@ -47,7 +47,7 @@ class CocoaPodsFunTest : WordSpec({
             result.toYaml() shouldBe expectedResult
         }
 
-        "determine dependencies from a Podfile.lock with a dependency tree" {
+        "determine dependencies from a Podfile with a dependency tree" {
             val definitionFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods/dep-tree/Podfile").absoluteFile
             val expectedResult = getExpectedResult(
                 definitionFile = definitionFile,
