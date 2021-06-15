@@ -1,7 +1,7 @@
 ---
 project:
-  id: "CocoaPods::src/funTest/assets/projects/synthetic/cocoapods/dep-tree/Podfile.lock:"
-  definition_file_path: "analyzer/src/funTest/assets/projects/synthetic/cocoapods/dep-tree/Podfile.lock"
+  id: "CocoaPods::src/funTest/assets/projects/synthetic/cocoapods/dep-tree/Podfile:"
+  definition_file_path: "analyzer/src/funTest/assets/projects/synthetic/cocoapods/dep-tree/Podfile"
   declared_licenses: []
   declared_licenses_processed: {}
   vcs:

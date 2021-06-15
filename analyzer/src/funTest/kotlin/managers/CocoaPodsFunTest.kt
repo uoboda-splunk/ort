@@ -36,7 +36,7 @@ private val SYNTHETIC_PROJECTS_DIR = File("src/funTest/assets/projects/synthetic
 class CocoaPodsFunTest : WordSpec({
     "resolveSingleProject()" should {
         "determine dependencies from a Podfile.lock without a dependency tree" {
-            val definitionFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods/regular/Podfile.lock").absoluteFile
+            val definitionFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods/regular/Podfile").absoluteFile
             val expectedResult = getExpectedResult(
                 definitionFile = definitionFile,
                 expectedResultFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods-regular-expected-output.yml")
@@ -48,10 +48,22 @@ class CocoaPodsFunTest : WordSpec({
         }
 
         "determine dependencies from a Podfile.lock with a dependency tree" {
-            val definitionFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods/dep-tree/Podfile.lock").absoluteFile
+            val definitionFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods/dep-tree/Podfile").absoluteFile
             val expectedResult = getExpectedResult(
                 definitionFile = definitionFile,
                 expectedResultFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods-dep-tree-expected-output.yml")
+            )
+
+            val result = createCocoaPods().resolveSingleProject(definitionFile)
+
+            result.toYaml() shouldBe expectedResult
+        }
+
+        "return no dependencies along with an issue if the lockfile is absent" {
+            val definitionFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods/no-lockfile/Podfile").absoluteFile
+            val expectedResult = getExpectedResult(
+                definitionFile = definitionFile,
+                expectedResultFile = SYNTHETIC_PROJECTS_DIR.resolve("cocoapods-no-lockfile-expected-output.yml")
             )
 
             val result = createCocoaPods().resolveSingleProject(definitionFile)
