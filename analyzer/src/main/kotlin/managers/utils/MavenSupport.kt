@@ -423,6 +423,8 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
     }
 
     private fun requestRemoteArtifact(artifact: Artifact, repositories: List<RemoteRepository>): RemoteArtifact {
+        log.info { "requestRemoteArtifact: " + artifact.artifactId }
+
         remoteArtifactCache.read(artifact.toString())?.let {
             log.debug { "Reading remote artifact for '$artifact' from disk cache." }
             return yamlMapper.readValue(it)
@@ -459,6 +461,7 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
         // Check the remote repositories for the availability of the artifact.
         // TODO: Currently only the first hit is stored, could query the rest of the repositories if required.
         remoteRepositories.forEach { repository ->
+            log.info { "requestRemoteArtifact: " + artifact + " in " + repository.url  }
             val repositoryLayout = try {
                 repositoryLayoutProvider.newRepositoryLayout(repositorySystemSession, repository)
             } catch (e: NoRepositoryLayoutException) {
@@ -492,6 +495,7 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
             }
 
             try {
+                log.debug { "start download..." }
                 wrapMavenSession {
                     val repositoryConnector = repositoryConnectorProvider
                         .newRepositoryConnector(repositorySystemSession, repository)
@@ -516,6 +520,7 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
 
                 val transporter = transporterProvider.newTransporter(repositorySystemSession, repository)
 
+                log.debug { "get actual checkum" }
                 @Suppress("TooGenericExceptionCaught")
                 val actualChecksum = try {
                     val task = GetTask(checksum.location)
@@ -532,6 +537,7 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
                     // Fall back to an empty checksum string.
                     ""
                 }
+                log.debug { "got actual checkum" }
 
                 val downloadUrl = "${repository.url.trimEnd('/')}/$remoteLocation"
                 val hash = if (actualChecksum.isBlank()) Hash.NONE else Hash.create(actualChecksum, checksum.algorithm)

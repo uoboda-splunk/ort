@@ -28,6 +28,16 @@ import org.gradle.api.internal.artifacts.repositories.DefaultMavenArtifactReposi
 import org.gradle.tooling.provider.model.ToolingModelBuilder
 import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry
 
+
+class MyLog {
+    static void ld(String message) {
+        def outfile = new File("/workspace/out/test.txt")
+        outfile.append(message + "\n")
+    }
+}
+
+MyLog.ld("HELLO FROM INIT")
+
 def maxMemInMib = Runtime.getRuntime().maxMemory() / (1024 * 1024)
 logger.quiet("Gradle may use a maximum of $maxMemInMib MiB of memory.")
 
@@ -130,6 +140,7 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
     private final ToolingModelBuilderRegistry registry
 
     AbstractDependencyTreePlugin(ToolingModelBuilderRegistry registry) {
+        MyLog.ld("AbstractDependencyTreePlugin")
         this.registry = registry
     }
 
@@ -156,6 +167,7 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
 
         @Override
         Object buildAll(String modelName, Project project) {
+            MyLog.ld("buildAll(): project=" + project.getRootDir().name)
             List<String> errors = []
             List<String> warnings = []
 
@@ -171,10 +183,12 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
                 // For versions of Gradle before the "canBeResolved" property was introduced, consider any
                 // configuration to be resolvable.
                 if (!configuration.hasProperty('canBeResolved') || configuration.canBeResolved) {
+                    MyLog.ld("RESOLVING: Configuration '${configuration.name}'.")
                     ResolutionResult result = configuration.getIncoming().getResolutionResult()
                     Set<ResolvedArtifact> resolvedArtifacts = []
 
                     try {
+                        MyLog.ld("get artifacts.")
                         resolvedArtifacts = configuration.resolvedConfiguration.lenientConfiguration
                                 .getArtifacts(Specs.<org.gradle.api.artifacts.Dependency> satisfyAll())
                     } catch (ResolveException e) {
@@ -183,16 +197,23 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
                                 "available: ${e.message}")
                     }
 
+                    def count = result.getRoot().getDependencies().size()
+                    def i = 1
+
                     List<Dependency> dependencies = result.getRoot().getDependencies().collect {
+                        MyLog.ld("${configuration.name}: fetch ${i++} / $count:")
                         fetchDependency(it, project, resolvedArtifacts, [] as Set<String>)
                     }
 
                     new ConfigurationImpl(configuration.name, dependencies)
                 } else {
+                    MyLog.ld("Configuration '${configuration.name}' cannot be resolved.")
                     project.logger.info("Configuration '${configuration.name}' cannot be resolved.")
                     null
                 }
             }
+
+            MyLog.ld("buildAll(): resolved all configs for project: " + project.getRootDir().name)
 
             List<String> repositories = project.repositories.findResults {
                 if (it instanceof DefaultMavenArtifactRepository) {
@@ -211,10 +232,16 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
                 }
             }
 
+            MyLog.ld("Found ${repositories.size()} repositories.")
+
             def version = project.version.toString()
             if (version == 'unspecified') version = ''
-            return new DependencyTreeModelImpl(project.group.toString(), project.name, version, configurations,
+            MyLog.ld("INIT THE RESULT.")
+            def result = new DependencyTreeModelImpl(project.group.toString(), project.name, version, configurations,
                     repositories, errors.unique(), warnings.unique())
+            MyLog.ld("INIT THE RESULT DONE.")
+
+            return result
         }
 
         /**
@@ -222,7 +249,7 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
          * Dependency instance in the cache compatible with the result. If this is not the case, parseDependency()
          * is called to generate a new instance.
          *
-         * @param dependencyResult represents the package to be processed
+         * @param dependencyResult represents the package to be processedfetchDependency
          * @param project the current project
          * @param resolvedArtifacts the set of resolved artifacts
          * @param visited a set with dependency nodes already visited to detect cycles in the graph
@@ -231,17 +258,26 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
         private Dependency fetchDependency(DependencyResult dependencyResult, Project project,
                                            Set<ResolvedArtifact> resolvedArtifacts, Set<String> visited) {
             def dependencyId = identifierFor(dependencyResult, project)
+            MyLog.ld("fetchDependency: " + dependencyId)
+            project.logger.quiet("fetchDependency: " + dependencyId)
             dependencies.putIfAbsent(dependencyId, [])
+            long start = System.nanoTime()
+            MyLog.ld("fetchDependency($dependencyId): Checking equality.")
             def dependency = dependencies[dependencyId].find {
                 dependencyTreeEquals(it, dependencyResult, project, [] as Set<String>)
             }
+            long time = System.nanoTime() - start
+            long millis = time / 1000000
+            MyLog.ld("fetchDependency($dependencyId): Checking equality took $millis.")
 
             if (dependency != null) {
+                MyLog.ld("fetchDependency($dependencyId): cache hit out of " + dependencies[dependencyId].size + " entries.")
                 return dependency
             }
 
             dependency = parseDependency(dependencyResult, project, resolvedArtifacts, visited)
             dependencies[dependencyId].add(dependency)
+            MyLog.ld("fetchDependency($dependencyId): cache fail with " + dependencies[dependencyId].size + " entries.")
             return dependency
         }
 
@@ -257,6 +293,9 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
          */
         private Dependency parseDependency(DependencyResult dependencyResult, Project project,
                                            Set<ResolvedArtifact> resolvedArtifacts, Set<String> parents) {
+            def dependencyId = identifierFor(dependencyResult, project)
+            MyLog.ld("parseDependency: " + dependencyId)
+
             if (dependencyResult instanceof ResolvedDependencyResult) {
                 List<Dependency> dependencies = dependencyResult.selected.dependencies.findResults { dependency ->
                     // Do not follow circular dependencies, these can exist for project dependencies.
@@ -350,6 +389,8 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
          */
         private static boolean dependencyTreeEquals(Dependency dependency, DependencyResult dependencyResult,
                                                     Project project, Set<String> visited) {
+            if ("a" == "a") return false
+
             def displayName = dependencyResult.requested.displayName
             if (displayName in visited) {
                 return true  // We visited this node already.

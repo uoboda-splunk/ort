@@ -54,6 +54,7 @@ import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.utils.Os
 import org.ossreviewtoolkit.utils.log
 import org.ossreviewtoolkit.utils.temporaryProperties
+import kotlin.system.exitProcess
 
 /**
  * The [Gradle](https://gradle.org/) package manager for Java.
@@ -63,7 +64,7 @@ class Gradle(
     analysisRoot: File,
     analyzerConfig: AnalyzerConfiguration,
     repoConfig: RepositoryConfiguration,
-    private val gradleVersion: String? = null
+    private val gradleVersion: String? = "7.0.2"
 ) : PackageManager(name, analysisRoot, analyzerConfig, repoConfig) {
     class Factory : AbstractPackageManagerFactory<Gradle>("Gradle") {
         // Gradle prefers Groovy ".gradle" files over Kotlin ".gradle.kts" files, but "build" files have to come before
@@ -162,10 +163,13 @@ class Gradle(
         val gradleConnector = GradleConnector.newConnector()
 
         if (gradleVersion != null) {
+            log.debug { "Use Gradle version '$gradleVersion'." }
+
             gradleConnector.useGradleVersion(gradleVersion)
         }
 
         if (gradleConnector is DefaultGradleConnector) {
+            log.debug { "Set 'daemonMaxIdleTime' to 10 seconds." }
             // Note that the Gradle Tooling API always uses the Gradle daemon, see
             // https://docs.gradle.org/current/userguide/third_party_integration.html#sec:embedding_daemon.
             gradleConnector.daemonMaxIdleTime(10, TimeUnit.SECONDS)
@@ -183,23 +187,31 @@ class Gradle(
         }
 
         val projectDir = definitionFile.parentFile
+        log.debug { "Obtaining a connections" }
         val gradleConnection = gradleConnector.forProjectDirectory(projectDir).connect()
 
         return temporaryProperties(*gradleSystemProperties.toTypedArray()) {
             gradleConnection.use { connection ->
+                log.debug { "Using the connection..." }
+
                 val initScriptFile = File.createTempFile("init", ".gradle")
                 initScriptFile.writeBytes(javaClass.getResource("/scripts/init.gradle").readBytes())
 
                 val stdout = ByteArrayOutputStream()
                 val stderr = ByteArrayOutputStream()
 
-                val dependencyTreeModel = connection
+                val builder = connection
                     .model(DependencyTreeModel::class.java)
                     .addJvmArguments(jvmArgs)
-                    .setStandardOutput(stdout)
-                    .setStandardError(stderr)
                     .withArguments("-Duser.home=${Os.userHomeDirectory}", "--init-script", initScriptFile.path)
-                    .get()
+
+                log.debug { "Get the dependency tree model..." }
+                val dependencyTreeModel = try {
+                    builder.get()
+                } catch (e: Exception) {
+                    log.debug { "failed getting the model." }
+                    throw e
+                }
 
                 if (stdout.size() > 0) {
                     log.debug {

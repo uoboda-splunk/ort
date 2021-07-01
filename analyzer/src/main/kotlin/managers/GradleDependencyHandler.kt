@@ -36,6 +36,7 @@ import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyHandler
 import org.ossreviewtoolkit.utils.collectMessagesAsString
+import org.ossreviewtoolkit.utils.log
 import org.ossreviewtoolkit.utils.showStackTrace
 
 /**
@@ -88,6 +89,7 @@ class GradleDependencyHandler(
         if (dependency.isProjectDependency()) PackageLinkage.PROJECT_DYNAMIC else PackageLinkage.DYNAMIC
 
     override fun createPackage(dependency: Dependency, issues: MutableList<OrtIssue>): Package? {
+        log.info { "GDH.createPackage: " + dependency.artifactId }
         // Only look for a package if there was no error resolving the dependency and it is no project dependency.
         if (dependency.error != null || dependency.isProjectDependency()) return null
 
@@ -97,7 +99,9 @@ class GradleDependencyHandler(
         )
 
         return try {
-            maven.parsePackage(artifact, repositories)
+            val result = maven.parsePackage(artifact, repositories)
+            log.info { "GDH.createPackage: " + dependency.artifactId + " done." }
+            result
         } catch (e: ProjectBuildingException) {
             e.showStackTrace()
 
