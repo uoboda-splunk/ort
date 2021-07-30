@@ -61,10 +61,10 @@ class GetPackageLicensesCommand : CliktCommand(
                 "-P scanner.postgresStorage.schema=testSchema"
     ).associate()
 
-    private val packageId by option(
-        "--package-id",
+    private val packageIdsFile by option(
+        "--package-ids-file",
         help = "The target package for which the licenses shall be listed."
-    ).convert { Identifier(it) }
+    ).file(mustExist = true, canBeFile = true, canBeDir = false, mustBeWritable = false, mustBeReadable = true)
         .required()
 
     private val packageConfigurationOption by mutuallyExclusiveOptions(
@@ -84,32 +84,43 @@ class GetPackageLicensesCommand : CliktCommand(
     ).single()
 
     override fun run() {
-        val scanResults = getScanResultStorage().getScanResults(packageId)
-        val packageConfigurationProvider = packageConfigurationOption.createProvider()
+        val packageIds = packageIdsFile.readLines().filter { it.isNotBlank() }.map { Identifier(it) }
+        val scanResultsStorage = getScanResultStorage()
 
-        scanResults.firstOrNull()?.let { scanResult ->
-            val packageConfiguration = packageConfigurationProvider.getPackageConfiguration(
-                packageId, scanResult.provenance)
-            val licenseFindingCurations = packageConfiguration?.licenseFindingCurations.orEmpty()
-            val pathExcludes = packageConfiguration?.pathExcludes.orEmpty()
+        packageIds.forEach { packageId ->
+            val scanResults = scanResultsStorage.getScanResults(packageId)
+            val packageConfigurationProvider = packageConfigurationOption.createProvider()
 
-            val nonExcludedLicenseFindings = scanResult.summary.licenseFindings.filter { licenseFinding ->
-                pathExcludes.none { it.matches(licenseFinding.location.path) }
+            scanResults.firstOrNull()?.let { scanResult ->
+                val packageConfiguration = packageConfigurationProvider.getPackageConfiguration(
+                    packageId, scanResult.provenance
+                )
+                val licenseFindingCurations = packageConfiguration?.licenseFindingCurations.orEmpty()
+                val pathExcludes = packageConfiguration?.pathExcludes.orEmpty()
+
+                val nonExcludedLicenseFindings = scanResult.summary.licenseFindings.filter { licenseFinding ->
+                    pathExcludes.none { it.matches(licenseFinding.location.path) }
+                }
+
+                val curatedFindings = FindingCurationMatcher()
+                    .applyAll(nonExcludedLicenseFindings, licenseFindingCurations)
+                    .mapNotNull { it.curatedFinding }
+
+                val detectedLicense = curatedFindings.map { it.license.toString() }
+                    .distinct().sorted().joinToString(" AND ")
+
+                val rootLicense = RootLicenseMatcher().getApplicableRootLicenseFindingsForDirectories(
+                    licenseFindings = curatedFindings,
+                    directories = listOf("") // TODO: use the proper VCS path.
+                ).values.flatten().map { it.license.toString() }.distinct().sorted().joinToString(" AND ")
+
+                val license = rootLicense.takeIf { it.isNotBlank() } ?: detectedLicense.takeIf { it.isNotBlank() } ?: "NONE"
+
+                println(packageId.toCoordinates() + ";" + license)
+                return@forEach
             }
 
-            val curatedFindings = FindingCurationMatcher()
-                .applyAll(nonExcludedLicenseFindings, licenseFindingCurations)
-                .mapNotNull { it.curatedFinding }
-
-            val detectedLicense = curatedFindings.map { it.license.toString() }
-                .distinct().sorted().joinToString(" AND ")
-
-            val rootLicense = RootLicenseMatcher().getApplicableRootLicenseFindingsForDirectories(
-                licenseFindings = curatedFindings,
-                directories = listOf("") // TODO: use the proper VCS path.
-            ).values.flatten().map { it.license.toString() }.distinct().sorted().joinToString(" AND ")
-
-            println(Result(detectedLicense, rootLicense).toYaml())
+            println(packageId.toCoordinates() + ";" + "NOASSERTION")
         }
     }
 
