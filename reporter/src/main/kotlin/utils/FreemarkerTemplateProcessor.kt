@@ -47,6 +47,7 @@ import org.ossreviewtoolkit.model.licenses.ResolvedLicense
 import org.ossreviewtoolkit.model.licenses.ResolvedLicenseFileInfo
 import org.ossreviewtoolkit.model.licenses.ResolvedLicenseInfo
 import org.ossreviewtoolkit.model.licenses.filterExcluded
+import org.ossreviewtoolkit.model.yamlMapper
 import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.spdx.SpdxConstants
@@ -374,11 +375,13 @@ internal fun OrtResult.deduplicateProjectScanResults(targetProjects: Set<Identif
     val projectsToFilter = getProjects().mapTo(mutableSetOf()) { it.id } - targetProjects
 
     val scanResults = scanner?.results?.scanResults?.mapValuesTo(sortedMapOf()) { (id, results) ->
+        log.info { "debug: id=${id.toCoordinates()}" }
         if (id !in projectsToFilter) {
             results
         } else {
             results.map { scanResult ->
                 val summary = scanResult.summary
+                log.info { "provenance: " + yamlMapper.writerWithDefaultPrettyPrinter().writeValueAsString(scanResult.provenance) }
                 val repositoryPath = getRepositoryPath(scanResult.provenance as RepositoryProvenance)
                 fun TextLocation.isExcluded() = "$repositoryPath$path" !in excludePaths
 
