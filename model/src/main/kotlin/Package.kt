@@ -57,6 +57,13 @@ data class Package(
     val authors: SortedSet<String> = sortedSetOf(),
 
     /**
+     * The list of copyright holders of this package. This might be different from the list of [authors] if all or part
+     * of the copyright has been transferred.
+     */
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    val copyrights: SortedSet<String> = sortedSetOf(),
+
+    /**
      * The list of licenses the authors have declared for this package. This does not necessarily correspond to the
      * licenses as detected by a scanner. Both need to be taken into account for any conclusions.
      */
