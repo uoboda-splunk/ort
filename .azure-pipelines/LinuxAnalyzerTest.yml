@@ -43,11 +43,8 @@ jobs:
       mkdir -p $HOME/go/bin
       curl https://raw.githubusercontent.com/golang/dep/v$GO_DEP_VERSION/install.sh | sh
 
-      # Install 'CocoaPods'. As https://github.com/CocoaPods/CocoaPods/pull/10609 is needed but not yet released.
-      curl -ksSL https://github.com/CocoaPods/CocoaPods/archive/9461b346aeb8cba6df71fd4e71661688138ec21b.tar.gz | tar -zxC .
-      cd CocoaPods-9461b346aeb8cba6df71fd4e71661688138ec21b
-      gem build cocoapods.gemspec
-      sudo gem install cocoapods-1.10.1.gem
+      # Install 'CocoaPods'.
+      gem install cocoapods -v $COCOAPODS_VERSION
 
       # Update PATH for next steps, see:
       # https://docs.microsoft.com/en-us/azure/devops/pipelines/scripts/logging-commands?view=azure-devops&tabs=bash#prependpath-prepend-a-path-to-the--path-environment-variable
