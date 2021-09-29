@@ -380,4 +380,26 @@ class ExtensionsTest : WordSpec({
             fileFromStr.isFile shouldBe true
         }
     }
+
+    "Throwable.collectMessages" should {
+        "collect causes recursively" {
+            val hierarchy = Throwable("top").apply {
+                initCause(Throwable("cause", Throwable("causeForCause", Throwable("causeForCauseForCause"))))
+                addSuppressed(Throwable("suppressed1", Throwable("causeForSuppressed1")))
+                addSuppressed(Throwable("suppressed2", Throwable("causeForSuppressed2")))
+            }
+
+            fun t(name: String) = Throwable(name, Throwable("causeFor$name")).apply {
+                addSuppressed(Throwable("suppressedIn$name", Throwable("causeForSuppressed1")))
+                addSuppressed(Throwable("suppressed2", Throwable("causeForSuppressed2")))
+            }
+            T(
+                cause = T(),
+                suppressed = listOf(
+                    T()
+                )
+            )
+            hierarchy.collectMessagesAsString() shouldBe ""
+        }
+    }
 })
