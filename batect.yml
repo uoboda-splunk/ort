@@ -43,6 +43,10 @@ containers:
     privileged: true
     image: openjdk:17-slim-bullseye
     <<: *common-container-config
+  run:
+    privileged: true
+    build_directory: docker/run
+    <<: *common-container-config
 
 tasks:
   gradle:
@@ -64,3 +68,20 @@ tasks:
     run:
       container: build
       command: ./gradlew --stacktrace jar funTestClasses -x reporter-web-app:yarnBuild
+  requirements:
+    description: >-
+      A task to check ORT's requirements against the runtime container.
+    prerequisites:
+      - buildCli
+    run:
+      container: run
+      command: ./cli/build/install/ort/bin/ort requirements
+  funTest:
+    description: >-
+      A task to execute ORT's funtional tests in the runtime container. Can be limited to e.g. the "scanner" project
+      like `./batect funTest -- -p scanner`.
+    prerequisites:
+      - buildFunTest
+    run:
+      container: run
+      command: ./gradlew --stacktrace funTest
