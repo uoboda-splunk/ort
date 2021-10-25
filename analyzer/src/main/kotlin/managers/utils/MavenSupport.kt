@@ -93,6 +93,7 @@ import org.ossreviewtoolkit.utils.ortDataDirectory
 import org.ossreviewtoolkit.utils.searchUpwardsForSubdirectory
 import org.ossreviewtoolkit.utils.showStackTrace
 import org.ossreviewtoolkit.utils.withoutPrefix
+import java.util.*
 
 fun Artifact.identifier() = "$groupId:$artifactId:$version"
 
@@ -135,12 +136,20 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
                 addAll(developers)
             }
 
-        fun parseLicenses(mavenProject: MavenProject) =
-            mavenProject.licenses.mapNotNull { license ->
+        fun parseLicenses(mavenProject: MavenProject): SortedSet<String> {
+            println("--- parse licenses ---")
+            println("mavenProject: " + mavenProject.artifactId + " " + mavenProject.groupId)
+
+            return mavenProject.licenses.mapNotNull { license ->
+                println("map $license")
                 license.comments.withoutPrefix("SPDX-License-Identifier:") {
+                    println("name: " + license.name.orEmpty())
+                    println("url: " + license.url.orEmpty())
+                    println("comments: " + license.comments.orEmpty())
                     license.name ?: license.url ?: license.comments
                 }?.trim()
             }.toSortedSet()
+        }
 
         fun processDeclaredLicenses(licenses: Set<String>): ProcessedDeclaredLicense =
             // See http://maven.apache.org/ref/3.6.3/maven-model/maven.html#project which says: "If multiple licenses
@@ -161,14 +170,20 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
          * SCM URL still is a prefix of the child POM's SCM URL.
          */
         fun getOriginalScm(mavenProject: MavenProject): Scm? {
+            println("-- getOriginalScm --")
             var scm = mavenProject.scm
             var parent = mavenProject.parent
 
             while (parent != null) {
+                println("parent: " + parent.groupId + ":" + parent.artifactId)
                 parent.scm?.let { parentScm ->
+                    println("parent-url: " + parentScm.url.orEmpty())
+                    println("parent-conn: " + scm.connection.orEmpty())
+
                     parentScm.connection?.let { parentConnection ->
                         if (parentConnection.isNotBlank() && scm.connection.startsWith(parentConnection)) {
                             scm = parentScm
+                            println("REASSIGN")
                         }
                     }
                 }
@@ -176,12 +191,20 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
                 parent = parent.parent
             }
 
+            println("result-url: " + scm?.url.orEmpty())
+            println("result-conn: " + scm?.connection.orEmpty())
+
             return scm
         }
 
         private fun parseScm(scm: Scm?): VcsInfo {
+            println("--- PARSE SCM ---")
+
             val connection = scm?.connection.orEmpty()
             val tag = scm?.tag?.takeIf { it != "HEAD" }.orEmpty()
+
+            println("connection: " + connection)
+            println("tag: " + tag)
 
             if (connection.isEmpty()) return VcsInfo.EMPTY
 
@@ -567,6 +590,8 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
         artifact: Artifact, repositories: List<RemoteRepository>,
         localProjects: Map<String, MavenProject> = emptyMap(), sbtMode: Boolean = false
     ): Package {
+        println("--- PARSE PACKAGE ---")
+        println(artifact.artifactId  + " : " + artifact.version)
         val mavenRepositorySystem = containerLookup<MavenRepositorySystem>()
         val projectBuilder = containerLookup<ProjectBuilder>()
         val projectBuildingRequest = createProjectBuildingRequest(false)
@@ -611,6 +636,7 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
         }
 
         val declaredLicenses = parseLicenses(mavenProject)
+        println("declaredLicenses: " + declaredLicenses.joinToString())
         val declaredLicensesProcessed = processDeclaredLicenses(declaredLicenses)
 
         val binaryRemoteArtifact = localProject?.let {
@@ -629,6 +655,7 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
             }
         }
 
+        println("obtain VCS from package")
         val vcsFromPackage = parseVcsInfo(mavenProject)
         val localDirectory = localProject?.file?.parentFile?.let {
             // TODO: Once SBT is implemented independently of Maven we can completely remove the "localProjects"
@@ -639,14 +666,19 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
                 it
             }
         }
+        println("vcsFromPackage: " + vcsFromPackage)
 
         val browsableScmUrl = getOriginalScm(mavenProject)?.url
         val homepageUrl = mavenProject.url
         val vcsFallbackUrls = listOfNotNull(browsableScmUrl, homepageUrl).toTypedArray()
+        println("fallbackUrls: " + vcsFallbackUrls.joinToString())
+
 
         val vcsProcessed = localDirectory?.let {
             PackageManager.processProjectVcs(it, vcsFromPackage, *vcsFallbackUrls)
         } ?: PackageManager.processPackageVcs(vcsFromPackage, *vcsFallbackUrls)
+
+        println("processed: " + vcsProcessed)
 
         return Package(
             id = Identifier(

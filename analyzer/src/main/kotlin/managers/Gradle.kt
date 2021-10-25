@@ -106,6 +106,14 @@ class Gradle(
                         artifactFile?.invariantSeparatorsPath
             }
 
+            if (artifactFile != null && artifactFile.name == "cicerone-6.6.pom") {
+                println("--- POM CONTENT ---")
+                println(artifactFile.readText())
+             //   artifactFile.delete()
+              //  return null
+            }
+
+
             return artifactFile
         }
 
