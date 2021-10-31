@@ -17,6 +17,10 @@
 
 FROM openjdk:17-slim-bullseye
 
+ARG \
+    # Package manager versions.
+    NPM_VERSION=7.20.6
+
 RUN \
     # Enable the "contrib" archive area e.g. for the "repo" tool.
     echo "deb http://deb.debian.org/debian bullseye contrib" >> /etc/apt/sources.list && \
@@ -28,5 +32,11 @@ RUN \
         mercurial \
         repo \
         subversion \
+        # Install a base version of NPM; the real version will be installed via NPM itself later. Do not use a Node
+        # version manager like "nvm" or "n" as ORT does not care about the Node version, but about the NPM version.
+        npm \
     && \
     rm -rf /var/lib/apt/lists/*
+
+# Install package managers (in custom versions from manager packages).
+RUN npm install -g npm@$NPM_VERSION
