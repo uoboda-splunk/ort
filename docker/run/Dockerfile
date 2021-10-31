@@ -19,7 +19,9 @@ FROM openjdk:17-slim-bullseye
 
 ARG \
     # Package manager versions.
-    NPM_VERSION=7.20.6
+    BOWER_VERSION=1.8.8 \
+    NPM_VERSION=7.20.6 \
+    YARN_VERSION=1.22.10
 
 RUN \
     # Enable the "contrib" archive area e.g. for the "repo" tool.
@@ -39,4 +41,4 @@ RUN \
     rm -rf /var/lib/apt/lists/*
 
 # Install package managers (in custom versions from manager packages).
-RUN npm install -g npm@$NPM_VERSION
+RUN npm install -g bower@$BOWER_VERSION npm@$NPM_VERSION yarn@$YARN_VERSION
