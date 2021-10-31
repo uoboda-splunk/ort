@@ -40,6 +40,7 @@ forbid_telemetry: true
 
 containers:
   build:
+    privileged: true
     image: openjdk:17-slim-bullseye
     <<: *common-container-config
 
