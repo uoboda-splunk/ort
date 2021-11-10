@@ -29,7 +29,6 @@ import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
-import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 val detektPluginVersion: String by project
@@ -42,6 +41,8 @@ val okhttpVersion: String by project
 
 plugins {
     kotlin("jvm")
+
+    `jvm-test-suite`
 
     id("com.github.ben-manes.versions")
     id("com.github.gmazzo.buildconfig")
@@ -167,9 +168,31 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "org.jetbrains.dokka")
 
-    sourceSets.create("funTest") {
-        withConvention(KotlinSourceSet::class) {
-            kotlin.srcDirs("src/funTest/kotlin")
+    testing {
+        suites {
+            named<JvmTestSuite>("test") {
+                dependencies {
+                    implementation(project(":utils:test-utils"))
+
+                    implementation("io.kotest:kotest-runner-junit5:$kotestVersion")
+                    implementation("io.kotest:kotest-assertions-core:$kotestVersion")
+                }
+            }
+
+            register<JvmTestSuite>("funTest") {
+                sources {
+                    kotlin.sourceSets.getByName(name).kotlin.srcDirs("src/funTest/kotlin")
+                }
+
+                dependencies {
+                    implementation(project)
+
+                    implementation(project(":utils:test-utils"))
+
+                    implementation("io.kotest:kotest-runner-junit5:$kotestVersion")
+                    implementation("io.kotest:kotest-assertions-core:$kotestVersion")
+                }
+            }
         }
     }
 
@@ -181,19 +204,6 @@ subprojects {
     //       determine.
     kotlin.target.compilations.run {
         getByName("funTest").associateWith(getByName(KotlinCompilation.MAIN_COMPILATION_NAME))
-    }
-
-    plugins.withType<JavaLibraryPlugin> {
-        dependencies {
-            "testImplementation"(project(":utils:test-utils"))
-
-            "testImplementation"("io.kotest:kotest-runner-junit5:$kotestVersion")
-            "testImplementation"("io.kotest:kotest-assertions-core:$kotestVersion")
-
-            "funTestImplementation"(sourceSets["main"].output)
-        }
-
-        configurations["funTestImplementation"].extendsFrom(configurations["testImplementation"])
     }
 
     configurations.all {
@@ -264,14 +274,6 @@ subprojects {
         }
     }
 
-    val funTest by tasks.registering(Test::class) {
-        description = "Runs the functional tests."
-        group = "Verification"
-
-        classpath = sourceSets["funTest"].runtimeClasspath
-        testClassesDirs = sourceSets["funTest"].output.classesDirs
-    }
-
     // Enable JaCoCo only if a JacocoReport task is in the graph as JaCoCo
     // is using "append = true" which disables Gradle's build cache.
     gradle.taskGraph.whenReady {
@@ -310,7 +312,7 @@ subprojects {
         }
     }
 
-    tasks.register<JacocoReport>("jacocoFunTestReport").configure {
+    /*tasks.register<JacocoReport>("jacocoFunTestReport").configure {
         description = "Generates code coverage report for the funTest task."
         group = "Reporting"
 
@@ -321,7 +323,7 @@ subprojects {
             // Enable XML in addition to HTML for CI integration.
             xml.isEnabled = true
         }
-    }
+    }*/
 
     tasks.register("jacocoReport").configure {
         description = "Generates code coverage reports for all test tasks."
@@ -331,7 +333,7 @@ subprojects {
     }
 
     tasks.named("check").configure {
-        dependsOn(funTest)
+        dependsOn(testing.suites.named("funTest"))
     }
 
     tasks.withType<Jar>().configureEach {
