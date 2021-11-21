@@ -20,6 +20,9 @@ FROM openjdk:17-slim-bullseye
 ARG \
     # Package manager versions.
     BOWER_VERSION=1.8.8 \
+    # Cargo versioning is a mess, see https://stackoverflow.com/a/70059372/1127485. This actually installs the Cargo
+    # binary in version 1.46.0.
+    CARGO_VERSION=0.47.0-3+b1 \
     NPM_VERSION=7.20.6 \
     YARN_VERSION=1.22.10
 
@@ -34,6 +37,8 @@ RUN \
         mercurial \
         repo \
         subversion \
+        # Install package managers (in fixed versions from OS packages).
+        cargo=$CARGO_VERSION \
         # Install a base version of NPM; the real version will be installed via NPM itself later. Do not use a Node
         # version manager like "nvm" or "n" as ORT does not care about the Node version, but about the NPM version.
         npm \
