@@ -63,6 +63,17 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+    - name: Install required tools
+      run: |
+          sudo apt-get install -y --no-install-recommends cvs
+
+          # Uninstall mono-devel because it contains the "lc" command which conflicts with BoyterLc.
+          sudo apt-get -qq remove mono-devel
+
+          # Install git-repo.
+          mkdir -p $HOME/.local/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo -o $HOME/.local/bin/repo
+          chmod a+x $HOME/.local/bin/repo
     - name: Checkout Repository
       uses: actions/checkout@v2
     - name: Setup Java
