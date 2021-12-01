@@ -26,6 +26,7 @@ import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
 import java.io.File
+import java.time.Instant
 
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Identifier
@@ -38,6 +39,7 @@ import org.ossreviewtoolkit.utils.core.normalizeVcsUrl
 import org.ossreviewtoolkit.utils.test.DEFAULT_ANALYZER_CONFIGURATION
 import org.ossreviewtoolkit.utils.test.DEFAULT_REPOSITORY_CONFIGURATION
 import org.ossreviewtoolkit.utils.test.USER_DIR
+import org.ossreviewtoolkit.utils.test.createTestTempFile
 import org.ossreviewtoolkit.utils.test.patchExpectedResult
 
 class SpdxDocumentFileFunTest : WordSpec({
@@ -108,6 +110,43 @@ class SpdxDocumentFileFunTest : WordSpec({
                 sortedSetOf()
             )
         }
+
+        "succeed for an SPDX file written by the SpdxDocumentReporter" {
+            val reporterProjectDir = File("../reporter/src/funTest/assets").absoluteFile
+            val definitionFile = reporterProjectDir.resolve("spdx-document-reporter-expected-output.spdx.yml")
+
+            // Patch up the report with a parsable date and time.
+            val patchedSpdxDocument = patchExpectedResult(
+                definitionFile,
+                mapOf("<REPLACE_CREATION_DATE_AND_TIME>" to Instant.EPOCH.toString())
+            )
+            val patchedDefinitionFile = createTestTempFile(suffix = ".spdx.yml").apply {
+                writeText(patchedSpdxDocument)
+            }
+
+            val actualResult = createSpdxDocumentFile().resolveSingleProject(patchedDefinitionFile)
+
+            actualResult shouldBe ProjectAnalyzerResult(
+                Project(
+                    id = Identifier("SpdxDocumentFile::zlib:1.2.11"),
+                    cpe = "cpe:/a:compress:zlib:1.2.11:::en-us",
+                    definitionFilePath = "",
+                    authors = sortedSetOf("Jean-loup Gailly", "Mark Adler"),
+                    declaredLicenses = sortedSetOf("Zlib"),
+                    vcs = VcsInfo(
+                        type = VcsType.GIT,
+                        url = normalizeVcsUrl(vcsUrl),
+                        revision = vcsRevision,
+                        path = ""
+                    ),
+                    homepageUrl = "http://zlib.net",
+                    scopeDependencies = sortedSetOf(
+                        Scope("default")
+                    )
+                ),
+                sortedSetOf()
+            )
+        }
     }
 
     "mapDefinitionFiles()" should {
@@ -132,8 +171,6 @@ class SpdxDocumentFileFunTest : WordSpec({
 
             result should containExactly(definitionFiles)
         }
-
-        // TODO: Test that we can read in files written by SpdxDocumentReporter.
     }
 })
 
