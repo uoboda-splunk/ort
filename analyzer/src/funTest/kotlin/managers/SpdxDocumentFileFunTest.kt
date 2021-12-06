@@ -29,13 +29,17 @@ import java.io.File
 import java.time.Instant
 
 import org.ossreviewtoolkit.downloader.VersionControlSystem
+import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Identifier
+import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
+import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.utils.core.normalizeVcsUrl
+import org.ossreviewtoolkit.utils.spdx.toSpdx
 import org.ossreviewtoolkit.utils.test.DEFAULT_ANALYZER_CONFIGURATION
 import org.ossreviewtoolkit.utils.test.DEFAULT_REPOSITORY_CONFIGURATION
 import org.ossreviewtoolkit.utils.test.USER_DIR
@@ -126,25 +130,85 @@ class SpdxDocumentFileFunTest : WordSpec({
 
             val actualResult = createSpdxDocumentFile().resolveSingleProject(patchedDefinitionFile)
 
-            actualResult shouldBe ProjectAnalyzerResult(
+            /*actualResult shouldBe ProjectAnalyzerResult(
                 Project(
-                    id = Identifier("SpdxDocumentFile::zlib:1.2.11"),
-                    cpe = "cpe:/a:compress:zlib:1.2.11:::en-us",
+                    id = Identifier("SpdxDocumentFile::Root package:"),
                     definitionFilePath = "",
-                    authors = sortedSetOf("Jean-loup Gailly", "Mark Adler"),
-                    declaredLicenses = sortedSetOf("Zlib"),
+                    declaredLicenses = sortedSetOf("NOASSERTION"),
                     vcs = VcsInfo(
                         type = VcsType.GIT,
                         url = normalizeVcsUrl(vcsUrl),
                         revision = vcsRevision,
                         path = ""
                     ),
-                    homepageUrl = "http://zlib.net",
+                    homepageUrl = "NOASSERTION",
                     scopeDependencies = sortedSetOf(
                         Scope("default")
                     )
                 ),
                 sortedSetOf()
+            )*/
+            actualResult.packages shouldBe sortedSetOf(
+                Package(
+                    id = Identifier("SpdxDocumentFile::first-package:0.0.1"),
+                    purl = "pkg:maven/first-package-group/first-package@0.0.1",
+                    declaredLicenses = sortedSetOf("BSD-3-Clause AND (MIT OR GPL-2.0-only)"),
+                    concludedLicense = "BSD-2-Clause AND BSD-3-Clause AND MIT".toSpdx(),
+                    description = "A package with all supported attributes set, with a VCS URL containing a user " +
+                            "name, and with a scan result containing two copyright finding matched to a license " +
+                            "finding.",
+                    homepageUrl = "first package's homepage URL",
+                    binaryArtifact = RemoteArtifact(
+                        url = "https://some-host/first-package.jar",
+                        hash = Hash.NONE
+                    ),
+                    sourceArtifact = RemoteArtifact.EMPTY,
+                    vcs = VcsInfo.EMPTY
+                ),
+                Package(
+                    id = Identifier("SpdxDocumentFile::second-package:0.0.1"),
+                    purl = "pkg:maven/second-package-group/second-package@0.0.1",
+                    declaredLicenses = sortedSetOf("NOASSERTION"),
+                    concludedLicense = "NOASSERTION".toSpdx(),
+                    description = "",
+                    homepageUrl = "NONE",
+                    binaryArtifact = RemoteArtifact.EMPTY,
+                    sourceArtifact = RemoteArtifact.EMPTY,
+                    vcs = VcsInfo.EMPTY
+                ),
+                Package(
+                    id = Identifier("SpdxDocumentFile::third-package:0.0.1"),
+                    purl = "pkg:maven/third-package-group/third-package@0.0.1",
+                    declaredLicenses = sortedSetOf("NOASSERTION"),
+                    concludedLicense = "NOASSERTION".toSpdx(),
+                    description = "",
+                    homepageUrl = "NONE",
+                    binaryArtifact = RemoteArtifact.EMPTY,
+                    sourceArtifact = RemoteArtifact.EMPTY,
+                    vcs = VcsInfo.EMPTY
+                ),
+                Package(
+                    id = Identifier("SpdxDocumentFile::fourth-package:0.0.1"),
+                    purl = "pkg:maven/fourth-package-group/fourth-package@0.0.1",
+                    declaredLicenses = sortedSetOf("MIT"),
+                    concludedLicense = "NOASSERTION".toSpdx(),
+                    description = "A package with partially mapped declared license.",
+                    homepageUrl = "NONE",
+                    binaryArtifact = RemoteArtifact.EMPTY,
+                    sourceArtifact = RemoteArtifact.EMPTY,
+                    vcs = VcsInfo.EMPTY
+                ),
+                Package(
+                    id = Identifier("SpdxDocumentFile::sixth-package:0.0.1"),
+                    purl = "pkg:maven/sixth-package-group/sixth-package@0.0.1",
+                    declaredLicenses = sortedSetOf("LicenseRef-scancode-asmus"),
+                    concludedLicense = "LicenseRef-scancode-srgb".toSpdx(),
+                    description = "A package with non-SPDX license IDs in the declared and concluded license.",
+                    homepageUrl = "NONE",
+                    binaryArtifact = RemoteArtifact.EMPTY,
+                    sourceArtifact = RemoteArtifact.EMPTY,
+                    vcs = VcsInfo.EMPTY
+                )
             )
         }
     }
