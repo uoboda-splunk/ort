@@ -167,6 +167,7 @@ class PostgresStorage(
                             (rawParam("scan_result->'scanner'->>'name'") tilde scannerCriteria.regScannerName) and
                             (rawParam(VERSION_EXPRESSION) greaterEq arrayParam(minVersionArray)) and
                             (rawParam(VERSION_EXPRESSION) less arrayParam(maxVersionArray))
+                            // TODO
                 }.map { it.scanResult }
                     // TODO: Currently the query only accounts for the scanner criteria. Ideally also the provenance
                     //       should be checked in the query to reduce the downloaded data.
@@ -212,6 +213,7 @@ class PostgresStorage(
                                     (rawParam("scan_result->'scanner'->>'name'") tilde scannerCriteria.regScannerName) and
                                     (rawParam(VERSION_EXPRESSION) greaterEq arrayParam(minVersionArray)) and
                                     (rawParam(VERSION_EXPRESSION) less arrayParam(maxVersionArray))
+                                    // TODO
                         }.map { it.identifier to it.scanResult }
                     }
                 }.flatMap { it.await() }

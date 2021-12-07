@@ -95,7 +95,8 @@ data class ScannerCriteria(
             val minVersion = Semver(details.version)
 
             val maxVersion = when (versionDiff) {
-                Semver.VersionDiff.NONE, Semver.VersionDiff.SUFFIX, Semver.VersionDiff.BUILD -> minVersion.nextPatch()
+                Semver.VersionDiff.NONE -> minVersion
+                Semver.VersionDiff.SUFFIX, Semver.VersionDiff.BUILD -> minVersion.nextPatch()
                 Semver.VersionDiff.PATCH -> minVersion.nextMinor()
                 Semver.VersionDiff.MINOR -> minVersion.nextMajor()
                 else -> throw IllegalArgumentException("Invalid version difference $versionDiff")
@@ -114,8 +115,8 @@ data class ScannerCriteria(
     private val nameRegex: Regex by lazy { Regex(regScannerName) }
 
     init {
-        require(minVersion < maxVersion) {
-            "The `maxVersion` is exclusive and must be greater than the `minVersion`."
+        require(minVersion <= maxVersion) {
+            "The `maxVersion` must be greater than or equal to the `minVersion`."
         }
     }
 
@@ -128,6 +129,7 @@ data class ScannerCriteria(
         if (!nameRegex.matches(details.name)) return false
 
         val version = Semver(details.version)
-        return minVersion <= version && version < maxVersion && configMatcher(details.configuration)
+        return (minVersion <= version && version < maxVersion) || (minVersion == maxVersion && minVersion == version)
+                && configMatcher(details.configuration)
     }
 }
