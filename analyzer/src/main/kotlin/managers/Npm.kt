@@ -184,12 +184,56 @@ open class Npm(
             )
         }
 
+        private val cache = mutableMapOf<String, NpmjsPackageInfo?>()
+
+        private fun getPackageInfoFromNpmJS(encodedName: String, version: String, npmRegistry: String): NpmjsPackageInfo? {
+            val url = "$npmRegistry/$encodedName/$version"
+            if (cache.containsKey(url)) return cache[url]
+
+            var result: NpmjsPackageInfo? = null
+
+            OkHttpClientHelper.downloadText(url).onSuccess {
+                val versionInfo = jsonMapper.readTree(it)
+
+                val description = versionInfo["description"].textValueOrEmpty()
+                val homepageUrl = versionInfo["homepage"].textValueOrEmpty()
+                var downloadUrl = ""
+                var hash: Hash? = null
+
+                versionInfo["dist"]?.let { dist ->
+                    downloadUrl = dist["tarball"].textValueOrEmpty()
+                        // Work around the issue described at
+                        // https://npm.community/t/some-packages-have-dist-tarball-as-http-and-not-https/285/19.
+                        .replace("http://registry.npmjs.org/", "https://registry.npmjs.org/")
+
+                    hash = Hash.create(dist["shasum"].textValueOrEmpty())
+                }
+
+                result = NpmjsPackageInfo(description, homepageUrl, downloadUrl, hash ?: Hash.NONE, parseVcsInfo(versionInfo))
+            }.onFailure {
+                log.info {
+                    "Could not retrieve package information for '$encodedName' from NPM registry $npmRegistry: " +
+                            it.message
+                }
+            }
+
+            cache[url] = result
+
+            return result
+        }
+
+        private val cache2 = mutableMapOf<Pair<File, String>, Pair<String, Package>>()
+
         /**
          * Construct a [Package] by parsing its _package.json_ file and - if applicable - querying additional
          * content from the [npmRegistry]. Result is a [Pair] with the raw identifier and the new package.
          */
         @Suppress("HttpUrlsUsage")
         internal fun parsePackage(packageFile: File, npmRegistry: String): Pair<String, Package> {
+            val key = packageFile to npmRegistry
+            cache2[key]?.let { return it }
+
+
             val packageDir = packageFile.parentFile
 
             log.debug { "Found a 'package.json' file in '$packageDir'." }
@@ -238,27 +282,16 @@ open class Npm(
             } else {
                 log.debug { "Resolving the package info for '$identifier' via NPM registry." }
 
-                OkHttpClientHelper.downloadText("$npmRegistry/$encodedName/$version").onSuccess {
-                    val versionInfo = jsonMapper.readTree(it)
+                getPackageInfoFromNpmJS(encodedName, version, npmRegistry)?.let { info ->
+                    description = info.description
+                    homepageUrl = info.homepageUril
 
-                    description = versionInfo["description"].textValueOrEmpty()
-                    homepageUrl = versionInfo["homepage"].textValueOrEmpty()
-
-                    versionInfo["dist"]?.let { dist ->
-                        downloadUrl = dist["tarball"].textValueOrEmpty()
-                            // Work around the issue described at
-                            // https://npm.community/t/some-packages-have-dist-tarball-as-http-and-not-https/285/19.
-                            .replace("http://registry.npmjs.org/", "https://registry.npmjs.org/")
-
-                        hash = Hash.create(dist["shasum"].textValueOrEmpty())
+                    if (!info.downloadUrl.isNullOrBlank()) {
+                        downloadUrl = info.downloadUrl
+                        hash = info.hash
                     }
 
-                    vcsFromPackage = parseVcsInfo(versionInfo)
-                }.onFailure {
-                    log.info {
-                        "Could not retrieve package information for '$encodedName' from NPM registry $npmRegistry: " +
-                                it.message
-                    }
+                    vcsFromPackage = info.vcs
                 }
             }
 
@@ -295,7 +328,10 @@ open class Npm(
                 "Generated package info for $identifier has no version."
             }
 
-            return Pair(identifier, module)
+            val result = Pair(identifier, module)
+            cache2[key] = result
+
+            return result
         }
 
         /**
@@ -401,9 +437,16 @@ open class Npm(
 
         log.info { "Searching for 'package.json' files in '$nodeModulesDir'..." }
 
+        val files = mutableSetOf<File>()
+
         nodeModulesDir.walk().filter {
             it.name == "package.json" && isValidNodeModulesDirectory(nodeModulesDir, nodeModulesDirForPackageJson(it))
         }.forEach { file ->
+            files += file
+        }
+
+        files.forEachIndexed { i, file ->
+            log.debug { "\nParse package [$i / ${files.size}]:" }
             val (id, pkg) = parsePackage(file, npmRegistry)
             packages[id] = pkg
         }
@@ -498,6 +541,8 @@ open class Npm(
         }
     }
 
+    private var count = 0
+
     private fun getModuleInfo(
         moduleDir: File,
         scopes: Set<String>,
@@ -518,8 +563,13 @@ open class Npm(
             log.debug { "Not adding dependency '$moduleId' to avoid cycle: $cycle." }
             return null
         }
+        count++
 
-        log.debug { "Building dependency tree for '${moduleInfo.name}' from directory '$moduleDir'." }
+        if (count % 10000 == 0) {
+            println("built $count / ${cache3.size} module dirs.")
+        }
+
+        //log.debug { "Building dependency tree for '${moduleInfo.name}' from directory '$moduleDir'." }
 
         val pathToRoot = listOf(moduleDir) + ancestorModuleDirs
         moduleInfo.dependencyNames.forEach { dependencyName ->
@@ -527,7 +577,7 @@ open class Npm(
 
             if (dependencyModuleDirPath.isNotEmpty()) {
                 val dependencyModuleDir = dependencyModuleDirPath.first()
-                log.debug { "Found module dir for '$dependencyName' at '$dependencyModuleDir'." }
+               // log.debug { "Found module dir for '$dependencyName' at '$dependencyModuleDir'." }
 
                 getModuleInfo(
                     moduleDir = dependencyModuleDir,
@@ -559,7 +609,12 @@ open class Npm(
         val packageJson: File
     )
 
+    private val cache3 = mutableMapOf<Pair<File, Set<String>>, RawModuleInfo>()
+
     private fun parsePackageJson(moduleDir: File, scopes: Set<String>): RawModuleInfo {
+        val key = moduleDir to scopes
+        cache3[key]?.let { return it }
+
         val packageJsonFile = moduleDir.resolve("package.json")
         val json = readJsonFile(packageJsonFile)
 
@@ -582,12 +637,16 @@ open class Npm(
             json[scope].fieldNamesOrEmpty().asSequence().filterNot { it == "//" }
         }
 
-        return RawModuleInfo(
+        val result = RawModuleInfo(
             name = name,
             version = version,
             dependencyNames = dependencyNames,
             packageJson = packageJsonFile
         )
+
+        cache3[key] = result
+
+        return result
     }
 
     private fun findDependencyModuleDir(dependencyName: String, searchModuleDirs: List<File>): List<File> {
@@ -655,4 +714,14 @@ open class Npm(
         // TODO: Capture warnings from npm output, e.g. "Unsupported platform" which happens for fsevents on all
         //       platforms except for Mac.
     }
+
+    data class NpmjsPackageInfo(
+        val description: String,
+        val homepageUril: String,
+        val downloadUrl: String?,
+        val hash: Hash,
+        val vcs: VcsInfo
+    )
 }
+
+

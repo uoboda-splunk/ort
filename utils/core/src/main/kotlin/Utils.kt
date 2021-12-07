@@ -63,7 +63,7 @@ val ortDataDirectory by lazy {
 /**
  * Global variable that gets toggled by a command line parameter parsed in the main entry points of the modules.
  */
-var printStackTrace = false
+var printStackTrace = true
 
 /**
  * Filter a list of [names] to include only those that likely belong to the given [version] of an optional [project].
