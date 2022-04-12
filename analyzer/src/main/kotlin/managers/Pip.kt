@@ -441,7 +441,7 @@ class Pip(
         log.info { "Creating a virtualenv for the '${workingDir.name}' project directory..." }
 
         // Try to determine the Python version the project requires.
-        var projectPythonVersion = 3
+        var projectPythonVersion = PythonVersion.getPythonVersion(workingDir)
 
         log.info { "Trying to install dependencies using Python $projectPythonVersion..." }
 
@@ -449,7 +449,24 @@ class Pip(
         val install = installDependencies(workingDir, definitionFile, virtualEnvDir)
 
         if (install.isError) {
-            throw IOException(install.stdout)
+            log.debug {
+                // pip writes the real error message to stdout instead of stderr.
+                "First try to install dependencies using Python $projectPythonVersion failed with:\n${install.stdout}"
+            }
+
+            // If there was a problem maybe the required Python version was detected incorrectly, so simply try again
+            // with the other version.
+            projectPythonVersion = when (projectPythonVersion) {
+                2 -> 3
+                3 -> 2
+                else -> throw IllegalArgumentException("Unsupported Python version $projectPythonVersion.")
+            }
+
+            log.info { "Falling back to trying to install dependencies using Python $projectPythonVersion..." }
+
+            virtualEnvDir.safeDeleteRecursively()
+            virtualEnvDir = createVirtualEnv(workingDir, projectPythonVersion)
+            installDependencies(workingDir, definitionFile, virtualEnvDir).requireSuccess()
         }
 
         log.info {
